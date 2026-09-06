@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { getChallengeById, assignChallenge } from "../services/api.js";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+import { getChallengeById, assignChallenge, upvoteChallenge } from "../services/api.js";
 import { Card, PriorityBadge, StageBadge, Tag, StageTimeline, BackLink, btnSecondary, btnPrimary, fmtDate, Empty } from "../components/UI.js";
 
 export function ChallengeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<number | null>(null);
+  const [upvoting, setUpvoting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -59,26 +61,100 @@ export function ChallengeDetailPage() {
     }
   };
 
+  const handleUpvote = async () => {
+    if (!id || upvoting) return;
+    setUpvoting(true);
+    try {
+      const updated = await upvoteChallenge(id);
+      setData((prev: any) => ({
+        ...prev,
+        challenge: {
+          ...prev.challenge,
+          upvotes: updated.upvotes,
+          reportCount: updated.reportCount,
+        },
+      }));
+    } catch (err: any) {
+      alert("Error upvoting: " + err.message);
+    } finally {
+      setUpvoting(false);
+    }
+  };
+
+  const duplicateBanner = (location.state as any)?.duplicateLinked ? (
+    <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-900 shadow-sm flex items-start gap-3">
+      <span className="text-xl">📢</span>
+      <div>
+        <p className="font-semibold">Matching issue detected & upvoted!</p>
+        <p className="text-sm text-emerald-800">
+          {(location.state as any).message ||
+            "A similar problem was already reported in this district. Your submission has been linked to this existing complaint to amplify visibility."}
+        </p>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-6">
       <BackLink href="/challenges">All challenges</BackLink>
+
+      {duplicateBanner}
+
+      {c.duplicateOfId && (
+        <div className="rounded-xl border border-blue-300 bg-blue-50 p-4 text-blue-900 shadow-sm flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="text-xl">ℹ️</span>
+            <div>
+              <p className="font-semibold">Merged with nearby report #{c.duplicateOfId}</p>
+              <p className="text-sm text-blue-800">
+                AI verified that this report describes the same problem as report #{c.duplicateOfId} within 100 meters. Both reports have been consolidated to accelerate resolution.
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`/challenges/${c.duplicateOfId}`}
+            className="shrink-0 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium shadow-sm transition-colors"
+          >
+            View primary report →
+          </Link>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <PriorityBadge priority={c.priority} />
             <StageBadge stage={c.status} />
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              👍 {c.upvotes || 1} {c.upvotes === 1 ? "upvote" : "upvotes"}
+            </span>
+            {(c.reportCount || 1) > 1 && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                🔄 {c.reportCount} reports merged
+              </span>
+            )}
           </div>
           <h1 className="mt-2 text-2xl font-semibold text-slate-900">{c.title}</h1>
           <p className="mt-1 text-sm text-slate-600">
             {c.village && `${c.village}, `}{c.block && `${c.block} block, `}{c.district} · Reported {fmtDate(c.createdAt)} by {c.reporterName} ({c.reporterType})
           </p>
         </div>
-        {project && (
-          <Link to={`/projects/${project.id}`} className={btnPrimary}>
-            Open project workspace →
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleUpvote}
+            disabled={upvoting}
+            className={`${btnSecondary} text-sm font-medium hover:border-emerald-500`}
+            title="Confirm that you face this issue too"
+          >
+            {upvoting ? "Saving..." : `👍 Upvote (${c.upvotes || 1})`}
+          </button>
+          {project && (
+            <Link to={`/projects/${project.id}`} className={btnPrimary}>
+              Open project workspace →
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">

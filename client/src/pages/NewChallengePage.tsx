@@ -48,6 +48,9 @@ export function NewChallengePage() {
   const [audioRecordingTime, setAudioRecordingTime] = useState(0);
   const [audioNoteUrl, setAudioNoteUrl] = useState<string | null>(null);
 
+  // AI categorization animation state
+  const [aiStage, setAiStage] = useState(0);
+
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -356,38 +359,166 @@ export function NewChallengePage() {
     }
 
     setSubmitting(true);
+    setAiStage(1);
     setError("");
+
+    const t1 = setTimeout(() => setAiStage(2), 650);
+    const t2 = setTimeout(() => setAiStage(3), 1350);
+    const t3 = setTimeout(() => setAiStage(4), 2050);
+    const minAnimPromise = new Promise((resolve) => setTimeout(resolve, 2600));
 
     try {
       const attachmentsList = audioNoteUrl ? [audioNoteUrl] : [];
-      const created = await createChallenge({
-        title,
-        description,
-        category: category || undefined,
-        affectedPopulation: affectedPopulation ? Number(affectedPopulation) : 0,
-        district,
-        block,
-        village,
-        hasAlternative: hasAlternative === "no" ? false : hasAlternative === "yes" ? true : undefined,
-        frequency: frequency || undefined,
-        vulnerableGroups,
-        reporterName: reporterName || "Anonymous",
-        reporterType,
-        lat: coords?.lat,
-        lng: coords?.lng,
-        attachments: attachmentsList,
-      });
+      const [created] = await Promise.all([
+        createChallenge({
+          title,
+          description,
+          category: category || undefined,
+          affectedPopulation: affectedPopulation ? Number(affectedPopulation) : 0,
+          district,
+          block,
+          village,
+          hasAlternative: hasAlternative === "no" ? false : hasAlternative === "yes" ? true : undefined,
+          frequency: frequency || undefined,
+          vulnerableGroups,
+          reporterName: reporterName || "Anonymous",
+          reporterType,
+          lat: coords?.lat,
+          lng: coords?.lng,
+          attachments: attachmentsList,
+        }),
+        minAnimPromise,
+      ]);
 
-      navigate(`/challenges/${created.id}`);
+      setAiStage(5);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      if (created && created.duplicateLinked) {
+        navigate(`/challenges/${created.id}`, {
+          state: {
+            duplicateLinked: true,
+            message: `A matching problem in ${district} was already reported. Your report has been linked to it as an upvote (total upvotes: ${created.upvotes || 1}).`,
+          },
+        });
+      } else {
+        navigate(`/challenges/${created.id}`);
+      }
     } catch (err: any) {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
       setError(err.message || "Failed to submit challenge.");
-    } finally {
       setSubmitting(false);
+      setAiStage(0);
     }
   };
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {/* AI Categorization & Triage Processing Modal */}
+      {submitting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-base shadow-md">
+                  ✨
+                </span>
+                <div>
+                  <h3 className="font-semibold text-slate-900 text-sm leading-tight">JanaSetu AI Triage Engine</h3>
+                  <p className="text-xs text-slate-500">Categorization & spatial deduplication</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping"></span>
+                {aiStage >= 5 ? "Complete" : "Analyzing"}
+              </span>
+            </div>
+
+            {/* Glowing AI Radar Box */}
+            <div className="rounded-xl bg-slate-950 p-5 text-center text-white relative overflow-hidden border border-slate-800 shadow-inner">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-indigo-500/10 animate-pulse"></div>
+              <div className="relative z-10 space-y-2">
+                <div className="text-3xl transition-transform duration-300">
+                  {aiStage === 1 ? "🔍" : aiStage === 2 ? "🏷️" : aiStage === 3 ? "📡" : aiStage === 4 ? "⚖️" : "✅"}
+                </div>
+                <div className="text-sm font-semibold tracking-wide text-emerald-400">
+                  {aiStage === 1 && "Parsing citizen complaint & language cues..."}
+                  {aiStage === 2 && "Categorizing into civic problem domain..."}
+                  {aiStage === 3 && `Scanning 100m radius in ${district || "district"} for duplicates...`}
+                  {aiStage === 4 && "Computing explainable priority & university matches..."}
+                  {aiStage >= 5 && "Categorization & routing complete!"}
+                </div>
+                <p className="text-xs text-slate-400 line-clamp-1 italic max-w-xs mx-auto">
+                  "{title}"
+                </p>
+              </div>
+            </div>
+
+            {/* Steps List */}
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-3 text-xs sm:text-sm">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  aiStage > 1 ? "bg-emerald-100 text-emerald-700" : aiStage === 1 ? "bg-emerald-600 text-white shadow-sm animate-pulse" : "bg-slate-100 text-slate-400"
+                }`}>
+                  {aiStage > 1 ? "✓" : "1"}
+                </span>
+                <span className={aiStage >= 1 ? "font-medium text-slate-800" : "text-slate-400"}>
+                  Natural language extraction & urgency detection
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs sm:text-sm">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  aiStage > 2 ? "bg-emerald-100 text-emerald-700" : aiStage === 2 ? "bg-emerald-600 text-white shadow-sm animate-pulse" : "bg-slate-100 text-slate-400"
+                }`}>
+                  {aiStage > 2 ? "✓" : "2"}
+                </span>
+                <span className={aiStage >= 2 ? "font-medium text-slate-800" : "text-slate-400"}>
+                  Domain & sub-tag classification ({category || "AI Auto-detect"})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs sm:text-sm">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  aiStage > 3 ? "bg-emerald-100 text-emerald-700" : aiStage === 3 ? "bg-emerald-600 text-white shadow-sm animate-pulse" : "bg-slate-100 text-slate-400"
+                }`}>
+                  {aiStage > 3 ? "✓" : "3"}
+                </span>
+                <span className={aiStage >= 3 ? "font-medium text-slate-800" : "text-slate-400"}>
+                  Spatial 100m deduplication scan in {district || "area"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs sm:text-sm">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-all ${
+                  aiStage > 4 ? "bg-emerald-100 text-emerald-700" : aiStage === 4 ? "bg-emerald-600 text-white shadow-sm animate-pulse" : "bg-slate-100 text-slate-400"
+                }`}>
+                  {aiStage > 4 ? "✓" : "4"}
+                </span>
+                <span className={aiStage >= 4 ? "font-medium text-slate-800" : "text-slate-400"}>
+                  Priority scoring & partner university matching
+                </span>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="space-y-1 pt-1">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-500 transition-all duration-300 ease-out"
+                  style={{ width: `${Math.min(100, aiStage * 25)}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-400">
+                <span>AI triage progress</span>
+                <span className="font-medium text-emerald-600">{Math.min(100, aiStage * 25)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <BackLink href="/challenges">All challenges</BackLink>
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Report a Problem</h1>

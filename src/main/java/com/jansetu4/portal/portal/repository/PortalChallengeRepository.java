@@ -10,4 +10,5 @@ import java.util.List;
 public interface PortalChallengeRepository extends JpaRepository<ChallengeEntity, Long> {
     List<ChallengeEntity> findByClusterId(Long clusterId);
     List<ChallengeEntity> findAllByOrderByCreatedAtDesc();
+    List<ChallengeEntity> findByDistrictIgnoreCase(String district);
 }

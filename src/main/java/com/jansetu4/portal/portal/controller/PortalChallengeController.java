@@ -31,6 +31,8 @@ public class PortalChallengeController {
     private final ClusteringService clusteringService;
     private final UniversityMatchingService matchingService;
     private final DistrictService districtService;
+    private final DeduplicationService deduplicationService;
+    private final AsyncDeduplicationService asyncDeduplicationService;
 
     @GetMapping
     public ResponseEntity<List<ChallengeEntity>> getChallenges(
@@ -268,7 +270,30 @@ public class PortalChallengeController {
                     .build());
         }
 
+        // Trigger async spatial (<100m) + category AI deduplication check in background
+        asyncDeduplicationService.checkAndMergeIfDuplicate(saved.getId());
+
         return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+    }
+
+    @PostMapping("/{id}/upvote")
+    public ResponseEntity<?> upvoteChallenge(@PathVariable Long id) {
+        Optional<ChallengeEntity> opt = challengeRepository.findById(id);
+        if (opt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", "Challenge not found"));
+        }
+        ChallengeEntity c = opt.get();
+        c.setUpvotes(c.getUpvotes() + 1);
+        c.setReportCount(c.getReportCount() + 1);
+        ChallengeEntity saved = challengeRepository.save(c);
+
+        notificationRepository.save(NotificationEntity.builder()
+                .challengeId(c.getId())
+                .message("A citizen confirmed/upvoted this challenge (Total upvotes: " + c.getUpvotes() + ").")
+                .createdAt(Instant.now())
+                .build());
+
+        return ResponseEntity.ok(saved);
     }
 
     @PostMapping("/{id}/assign")

@@ -98,6 +98,29 @@ public class ChallengeEntity {
     @Builder.Default
     private String reporterType = "Citizen";
 
+    @Column(name = "report_count")
+    @Builder.Default
+    private Integer reportCount = 1;
+
+    @Column(name = "upvotes")
+    @Builder.Default
+    private Integer upvotes = 1;
+
+    @Column(name = "duplicate_of_id")
+    private Long duplicateOfId;
+
+    @Transient
+    @Builder.Default
+    private Boolean duplicateLinked = false;
+
+    public Integer getReportCount() {
+        return reportCount != null ? reportCount : 1;
+    }
+
+    public Integer getUpvotes() {
+        return upvotes != null ? upvotes : 1;
+    }
+
     @Convert(converter = JsonStringListConverter.class)
     @Column(name = "attachments", columnDefinition = "json")
     @Builder.Default

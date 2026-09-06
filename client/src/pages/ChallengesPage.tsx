@@ -118,7 +118,19 @@ export function ChallengesPage() {
                       <Link to={`/challenges/${c.id}`} className="font-medium text-slate-900 hover:text-emerald-700 transition-colors">
                         {c.title}
                       </Link>
-                      <p className="text-xs text-slate-500">{c.reporterType}: {c.reporterName}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-slate-500">{c.reporterType}: {c.reporterName}</p>
+                        {(c.upvotes || 1) > 1 && (
+                          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                            👍 {c.upvotes}
+                          </span>
+                        )}
+                        {(c.reportCount || 1) > 1 && (
+                          <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                            🔄 {c.reportCount} merged
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-slate-700">
                       {c.category}
