@@ -21,7 +21,7 @@ app.use(express.json());
 
 // Health Check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "healthy", service: "JharVikas Backend API", time: new Date() });
+  res.json({ status: "healthy", service: "JanaSetu Backend API", time: new Date() });
 });
 
 // Mount Routes
@@ -35,7 +35,7 @@ app.use("/api/mentor", mentorRouter);
 
 // Start Server
 app.listen(PORT, async () => {
-  console.log(`🚀 JharVikas Backend Server running on http://localhost:${PORT}`);
+  console.log(`🚀 JanaSetu Backend Server running on http://localhost:${PORT}`);
   const isConnected = await testConnection();
   if (isConnected) {
     await seedIfEmpty();

@@ -42,7 +42,7 @@ export function HomePage() {
         <p className="text-xs font-semibold uppercase tracking-widest text-emerald-200">Societal Innovation Exchange · Jharkhand</p>
         <h1 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl">From a citizen&apos;s report to a solution that is built, piloted and measured.</h1>
         <p className="mt-4 max-w-2xl text-emerald-100">
-          JharVikas connects citizens, universities, industry and government in one pipeline — so a village handpump that dries up every summer becomes a research project, a prototype, a pilot and finally a deployed solution whose impact is verified.
+          JanaSetu connects citizens, universities, industry and government in one pipeline — so a village handpump that dries up every summer becomes a research project, a prototype, a pilot and finally a deployed solution whose impact is verified.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/challenges/new" className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-emerald-900 hover:bg-emerald-50 transition-colors shadow-sm">

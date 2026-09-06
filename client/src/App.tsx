@@ -37,7 +37,7 @@ export function App() {
           </Routes>
         </main>
         <footer className="border-t border-slate-200 bg-white py-6 text-center text-xs text-slate-500">
-          <p>JharVikas AI — Societal Innovation Exchange for Smart India Hackathon</p>
+          <p>JanaSetu AI — Societal Innovation Exchange for Smart India Hackathon</p>
         </footer>
       </div>
     </BrowserRouter>

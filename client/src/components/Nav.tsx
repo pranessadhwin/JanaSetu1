@@ -19,8 +19,8 @@ export function Nav() {
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link to="/" className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-700 text-sm font-bold text-white">JV</span>
-          <span className="text-base font-semibold tracking-tight text-slate-900">JharVikas <span className="font-normal text-slate-500">AI</span></span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-700 text-sm font-bold text-white">JS</span>
+          <span className="text-base font-semibold tracking-tight text-slate-900">JanaSetu <span className="font-normal text-slate-500">AI</span></span>
         </Link>
         <nav className="hidden items-center gap-1 lg:flex">
           {links.map((l) => {
