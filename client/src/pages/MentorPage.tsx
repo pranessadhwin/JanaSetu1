@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { getProjects, askMentorCopilot } from "../services/api.js";
 
 type Msg = {
@@ -20,6 +20,54 @@ export function MentorPage() {
   const [q, setQ] = useState("");
   const [ctx, setCtx] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const toggleVoice = () => {
+    if (listening) {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+      setListening(false);
+      return;
+    }
+
+    const w = window as any;
+    const SpeechRec = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!SpeechRec) {
+      alert("Speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge.");
+      return;
+    }
+
+    try {
+      const rec = new SpeechRec();
+      recognitionRef.current = rec;
+      rec.lang = "en-IN";
+      rec.continuous = false;
+      rec.interimResults = true;
+
+      rec.onresult = (e: any) => {
+        let transcript = "";
+        for (let i = 0; i < e.results.length; i++) {
+          transcript += e.results[i][0].transcript;
+        }
+        setQ(transcript);
+      };
+
+      rec.onerror = () => {
+        setListening(false);
+      };
+
+      rec.onend = () => {
+        setListening(false);
+      };
+
+      rec.start();
+      setListening(true);
+    } catch {
+      setListening(false);
+    }
+  };
 
   useEffect(() => {
     getProjects()
@@ -132,8 +180,20 @@ export function MentorPage() {
             className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
           />
           <button
+            type="button"
+            onClick={toggleVoice}
+            className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors cursor-pointer border ${
+              listening
+                ? "bg-red-600 text-white border-red-600 animate-pulse"
+                : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200"
+            }`}
+            title={listening ? "Stop listening" : "Speak question"}
+          >
+            {listening ? "● Stop" : "🎤"}
+          </button>
+          <button
             type="submit"
-            disabled={busy}
+            disabled={busy || !q.trim()}
             className="rounded-lg bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50 cursor-pointer shadow-sm transition-colors"
           >
             Ask

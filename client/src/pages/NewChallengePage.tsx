@@ -1,19 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createChallenge } from "../services/api.js";
 import { CATEGORIES, DISTRICT_NAMES } from "../constants.js";
 import { Card, inputCls, btnPrimary, BackLink } from "../components/UI.js";
 
-type SR = {
-  start: () => void;
-  stop: () => void;
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-};
+const VOICE_LANGUAGES = [
+  { code: "hi-IN", label: "हिन्दी (Hindi)" },
+  { code: "en-IN", label: "English (India)" },
+  { code: "bn-IN", label: "বাংলা (Bengali)" },
+  { code: "or-IN", label: "ଓଡ଼ିଆ (Odia)" },
+  { code: "te-IN", label: "తెలుగు (Telugu)" },
+  { code: "ta-IN", label: "தமிழ் (Tamil)" },
+  { code: "mr-IN", label: "मराठी (Marathi)" },
+  { code: "ur-IN", label: "اردو (Urdu)" },
+];
 
 export function NewChallengePage() {
   const navigate = useNavigate();
@@ -36,10 +36,26 @@ export function NewChallengePage() {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locMsg, setLocMsg] = useState("");
 
-  // Voice speech state
+  // Speech Recognition state
   const [listening, setListening] = useState(false);
+  const [interimText, setInterimText] = useState("");
   const [voiceLang, setVoiceLang] = useState("hi-IN");
   const [voiceError, setVoiceError] = useState("");
+  const [audioLevel, setAudioLevel] = useState(0);
+
+  // Audio Note Recording state (MediaRecorder fallback & voice note)
+  const [recordingAudio, setRecordingAudio] = useState(false);
+  const [audioRecordingTime, setAudioRecordingTime] = useState(0);
+  const [audioNoteUrl, setAudioNoteUrl] = useState<string | null>(null);
+
+  const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerIntervalRef = useRef<any>(null);
 
   const handleToggleVulnerable = (g: string) => {
     setVulnerableGroups((prev) =>
@@ -63,36 +79,274 @@ export function NewChallengePage() {
     );
   };
 
-  const startVoice = () => {
-    const w = window as unknown as { SpeechRecognition?: new () => SR; webkitSpeechRecognition?: new () => SR };
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) {
-      setVoiceError("Voice input is not supported in this browser. You can still type.");
+  const startAudioVisualizer = (stream: MediaStream) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const render = () => {
+        if (!isListeningRef.current && !mediaRecorderRef.current) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        setAudioLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        animFrameRef.current = requestAnimationFrame(render);
+      };
+      render();
+    } catch (e) {
+      console.warn("Audio meter could not be initialized:", e);
+    }
+  };
+
+  const startVoice = async () => {
+    setVoiceError("");
+    setInterimText("");
+
+    const w = window as any;
+    const SpeechRec = w.SpeechRecognition || w.webkitSpeechRecognition;
+
+    if (!SpeechRec) {
+      setVoiceError(
+        "Live speech recognition is not supported in this browser. Please use Google Chrome or Microsoft Edge, or record a Voice Note below."
+      );
       return;
     }
-    const rec = new Ctor();
-    rec.lang = voiceLang;
-    rec.interimResults = false;
-    rec.continuous = true;
-    rec.onresult = (e) => {
-      const text = Array.from(e.results as ArrayLike<ArrayLike<{ transcript: string }>>).map((r) => r[0].transcript).join(" ");
-      setDescription((prev) => (prev ? prev + " " : "") + text);
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => {
-      setListening(false);
-      setVoiceError("Voice recognition stopped. Please try again.");
-    };
-    rec.start();
-    setListening(true);
-    setVoiceError("");
-    (window as unknown as { __rec?: SR }).__rec = rec;
+
+    // Explicitly prompt for mic permission via getUserMedia
+    let stream: MediaStream | null = null;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+        startAudioVisualizer(stream);
+      } catch (err: any) {
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+          setVoiceError(
+            "Microphone permission denied. Please click the lock or microphone icon in your browser URL address bar to allow microphone access."
+          );
+          return;
+        }
+        console.warn("getUserMedia error:", err);
+      }
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
+      }
+
+      const rec = new SpeechRec();
+      recognitionRef.current = rec;
+      rec.lang = voiceLang;
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 1;
+
+      isListeningRef.current = true;
+      setListening(true);
+
+      rec.onresult = (e: any) => {
+        let finalChunk = "";
+        let interimChunk = "";
+
+        for (let i = e.resultIndex; i < e.results.length; ++i) {
+          const res = e.results[i];
+          const text = res[0]?.transcript || "";
+          if (res.isFinal) {
+            finalChunk += text;
+          } else {
+            interimChunk += text;
+          }
+        }
+
+        if (finalChunk.trim()) {
+          setDescription((prev) => {
+            const p = prev.trim();
+            const f = finalChunk.trim();
+            return p ? `${p} ${f}` : f;
+          });
+        }
+
+        setInterimText(interimChunk);
+      };
+
+      rec.onerror = (e: any) => {
+        console.warn("Speech recognition error:", e.error);
+        if (e.error === "no-speech") {
+          // Normal pause in speech, keep listening
+          return;
+        }
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          setVoiceError(
+            "Microphone access blocked. Please allow microphone permissions in your browser URL bar."
+          );
+          stopVoice();
+          return;
+        }
+        if (e.error === "network") {
+          setVoiceError(
+            "Speech recognition network service error. Check your internet connection or try recording a Voice Note below."
+          );
+          stopVoice();
+          return;
+        }
+        if (e.error === "audio-capture") {
+          setVoiceError("No microphone found. Please connect an audio input device.");
+          stopVoice();
+          return;
+        }
+        if (e.error !== "aborted") {
+          setVoiceError(`Voice recognition notification (${e.error}). Please click to speak again.`);
+        }
+      };
+
+      rec.onend = () => {
+        if (isListeningRef.current) {
+          try {
+            rec.start();
+          } catch {
+            // Already active or stopped
+          }
+        } else {
+          setListening(false);
+          setInterimText("");
+          setAudioLevel(0);
+        }
+      };
+
+      rec.start();
+    } catch (err: any) {
+      console.error("Speech recognition startup error:", err);
+      setVoiceError("Could not start speech recognition. Please verify your microphone permissions.");
+      stopVoice();
+    }
   };
 
   const stopVoice = () => {
-    (window as unknown as { __rec?: SR }).__rec?.stop();
+    isListeningRef.current = false;
     setListening(false);
+    setInterimText("");
+    setAudioLevel(0);
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {}
+      recognitionRef.current = null;
+    }
+
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {}
+      audioContextRef.current = null;
+    }
   };
+
+  const startAudioNoteRecording = async () => {
+    setVoiceError("");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      startAudioVisualizer(stream);
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : "";
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = reader.result as string;
+          setAudioNoteUrl(base64data);
+          if (!description.trim()) {
+            setDescription(`[Voice Note Recorded - ${audioRecordingTime}s audio description attached]`);
+          }
+        };
+        reader.readAsDataURL(audioBlob);
+
+        if (timerIntervalRef.current) {
+          clearInterval(timerIntervalRef.current);
+          timerIntervalRef.current = null;
+        }
+        setRecordingAudio(false);
+        setAudioLevel(0);
+      };
+
+      recorder.start(500);
+      setRecordingAudio(true);
+      setAudioRecordingTime(0);
+
+      timerIntervalRef.current = setInterval(() => {
+        setAudioRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (err: any) {
+      console.error("Audio recording error:", err);
+      setVoiceError("Could not access microphone for audio recording. Please allow microphone permissions.");
+      setRecordingAudio(false);
+    }
+  };
+
+  const stopAudioNoteRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try { audioContextRef.current.close(); } catch {}
+      audioContextRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopVoice();
+      stopAudioNoteRecording();
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +359,7 @@ export function NewChallengePage() {
     setError("");
 
     try {
+      const attachmentsList = audioNoteUrl ? [audioNoteUrl] : [];
       const created = await createChallenge({
         title,
         description,
@@ -120,6 +375,7 @@ export function NewChallengePage() {
         reporterType,
         lat: coords?.lat,
         lng: coords?.lng,
+        attachments: attachmentsList,
       });
 
       navigate(`/challenges/${created.id}`);
@@ -169,35 +425,141 @@ export function NewChallengePage() {
                 placeholder="When does it happen, who is affected, what do people do now? Mention if there is no alternative source."
                 className={inputCls}
               />
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
-                <select
-                  value={voiceLang}
-                  onChange={(e) => setVoiceLang(e.target.value)}
-                  className="rounded-md border border-slate-300 px-2 py-1 text-xs"
-                >
-                  <option value="hi-IN">Hindi</option>
-                  <option value="en-IN">English</option>
-                  <option value="bn-IN">Bengali</option>
-                  <option value="or-IN">Odia</option>
-                </select>
-                {listening ? (
-                  <button
-                    type="button"
-                    onClick={stopVoice}
-                    className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white cursor-pointer"
-                  >
-                    ● Stop recording
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={startVoice}
-                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
-                  >
-                    🎤 Speak instead of typing
-                  </button>
+              <div className="mt-2.5 space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  {/* Language Selector */}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-slate-500 font-medium">Language:</span>
+                    <select
+                      value={voiceLang}
+                      onChange={(e) => {
+                        setVoiceLang(e.target.value);
+                        if (listening) {
+                          stopVoice();
+                        }
+                      }}
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 shadow-2xs focus:border-emerald-500 focus:outline-hidden"
+                    >
+                      {VOICE_LANGUAGES.map((l) => (
+                        <option key={l.code} value={l.code}>
+                          {l.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Speech to Text Button */}
+                  {listening ? (
+                    <button
+                      type="button"
+                      onClick={stopVoice}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-red-700 cursor-pointer animate-pulse transition-all"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-white animate-ping" />
+                      ● Stop Speech-to-Text
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startVoice}
+                      disabled={recordingAudio}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 shadow-2xs hover:bg-emerald-100 disabled:opacity-50 cursor-pointer transition-colors"
+                    >
+                      <span>🎤</span> Speak instead of typing
+                    </button>
+                  )}
+
+                  {/* Separator */}
+                  <span className="text-slate-300 hidden sm:inline">|</span>
+
+                  {/* Audio Note Recorder */}
+                  {recordingAudio ? (
+                    <button
+                      type="button"
+                      onClick={stopAudioNoteRecording}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-rose-600 px-3 py-1 text-xs font-semibold text-white shadow-xs hover:bg-rose-700 cursor-pointer transition-all"
+                    >
+                      <span className="h-2 w-2 rounded-full bg-white" />
+                      ■ Stop Voice Note ({Math.floor(audioRecordingTime / 60)}:{(audioRecordingTime % 60).toString().padStart(2, "0")})
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startAudioNoteRecording}
+                      disabled={listening}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50 cursor-pointer transition-colors"
+                    >
+                      <span>🎙️</span> Record Voice Note
+                    </button>
+                  )}
+                </div>
+
+                {/* Live Speech Recognition Feedback Bar */}
+                {listening && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50/90 px-3 py-2 text-xs text-emerald-950 shadow-2xs transition-all">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+                      </span>
+                      <span className="font-semibold text-emerald-800">
+                        Listening ({VOICE_LANGUAGES.find((l) => l.code === voiceLang)?.label}):
+                      </span>
+                      <span className="italic text-slate-800">
+                        {interimText || "Speak into your microphone… words will appear in the box"}
+                      </span>
+                    </div>
+
+                    {/* Audio Level Equalizer */}
+                    <div className="flex items-end gap-0.5 h-4 px-1" title="Microphone sound level">
+                      <span
+                        className="w-1 bg-emerald-600 rounded-full transition-all duration-75"
+                        style={{ height: `${Math.max(4, Math.min(16, audioLevel * 0.16))}px` }}
+                      />
+                      <span
+                        className="w-1 bg-emerald-600 rounded-full transition-all duration-75"
+                        style={{ height: `${Math.max(4, Math.min(16, audioLevel * 0.22))}px` }}
+                      />
+                      <span
+                        className="w-1 bg-emerald-600 rounded-full transition-all duration-75"
+                        style={{ height: `${Math.max(4, Math.min(16, audioLevel * 0.14))}px` }}
+                      />
+                      <span
+                        className="w-1 bg-emerald-600 rounded-full transition-all duration-75"
+                        style={{ height: `${Math.max(4, Math.min(16, audioLevel * 0.2))}px` }}
+                      />
+                      <span
+                        className="w-1 bg-emerald-600 rounded-full transition-all duration-75"
+                        style={{ height: `${Math.max(4, Math.min(16, audioLevel * 0.12))}px` }}
+                      />
+                    </div>
+                  </div>
                 )}
-                {voiceError && <p className="w-full text-xs text-amber-700">{voiceError}</p>}
+
+                {/* Recorded Audio Preview */}
+                {audioNoteUrl && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                      <span>🎵 Voice Note attached</span>
+                      <audio controls src={audioNoteUrl} className="h-7 w-56" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setAudioNoteUrl(null)}
+                      className="text-xs text-rose-600 hover:text-rose-800 cursor-pointer font-medium"
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                )}
+
+                {/* Error Banner */}
+                {voiceError && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 flex items-start gap-1.5">
+                    <span className="font-bold">⚠️</span>
+                    <span>{voiceError}</span>
+                  </div>
+                )}
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
