@@ -53,11 +53,14 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/", "/*.html", "/css/**", "/js/**", "/favicon.ico").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/", "/*.html", "/assets/**", "/css/**", "/js/**", "/favicon.ico",
+                                "/challenges/**", "/projects/**", "/universities/**", "/industry/**",
+                                "/dashboard/**", "/knowledge/**", "/mentor/**", "/login", "/register/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/citizen/register", "/api/auth/login",
-                                "/api/industry/register").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/analytics/**", "/uploads/**", "/api/media/**",
-                                "/api/universities", "/api/local-bodies").permitAll()
+                                "/api/industry/register", "/api/challenges", "/api/mentor/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/analytics/**", "/api/dashboard/**", "/uploads/**", "/api/media/**",
+                                "/api/universities/**", "/api/local-bodies/**", "/api/challenges/**", "/api/projects/**",
+                                "/api/industry/**", "/api/knowledge/**").permitAll()
                         .anyRequest().authenticated())
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

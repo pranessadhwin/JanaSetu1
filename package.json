@@ -1,0 +1,16 @@
+{
+  "name": "jansetu",
+  "version": "1.0.0",
+  "private": true,
+  "description": "JanSetu - Societal Innovation Platform",
+  "scripts": {
+    "dev": "npm --prefix client run dev",
+    "build": "npm --prefix client run build:sync",
+    "server:dev": "npm --prefix server run dev",
+    "server:start": "npm --prefix server run start",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build:sync",
+    "client:install": "npm --prefix client install",
+    "server:spring": "mvnw.cmd spring-boot:run"
+  }
+}

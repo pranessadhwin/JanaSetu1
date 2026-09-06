@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="JanSetu — Bridging citizens, universities and industry for transparent, research-backed civic solutions." />
+  <title>JanSetu — Civic Issue Reporting Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+  <div id="site-nav"></div>
+
+  <main class="container">
+
+    <!-- Hero -->
+    <div class="hero-banner animate-in">
+      <h1 class="page-title">Bridging Citizens, Universities &amp; Solutions</h1>
+      <p class="page-subtitle">
+        JanSetu lets citizens report civic challenges, routes them to the right university
+        for research-backed action, and tracks progress transparently.
+      </p>
+      <div class="hero-cta">
+        <a class="btn" href="register.html">Report an Issue</a>
+        <a class="btn outline-white" href="universities.html">Browse Universities</a>
+      </div>
+    </div>
+
+    <div id="alert-box"></div>
+
+    <!-- Stats -->
+    <section class="grid grid-3 animate-in" id="summary-stats" style="animation-delay:.1s"></section>
+
+    <!-- Charts -->
+    <div class="divider"></div>
+    <div class="section-label animate-in" style="animation-delay:.15s">
+      <span class="slabel-icon">📊</span>
+      <h2>Analytics Overview</h2>
+    </div>
+
+    <section class="grid grid-2 animate-in" style="animation-delay:.2s">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🗂️</span>
+          <h3>Challenges by Domain</h3>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-domain"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-icon">🎓</span>
+          <h3>Challenges by University</h3>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-university"></canvas></div>
+      </div>
+    </section>
+
+    <section class="card animate-in" style="animation-delay:.25s">
+      <div class="card-header">
+        <span class="card-icon">📈</span>
+        <h3>Monthly Trend</h3>
+      </div>
+      <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer"><strong>JanSetu</strong> — Civic engagement platform &copy; 2025</footer>
+
+  <script src="js/api.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/home.js"></script>
+</body>
+</html>
