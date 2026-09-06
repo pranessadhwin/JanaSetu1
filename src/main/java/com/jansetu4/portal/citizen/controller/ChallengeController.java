@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/challenges")
+@RequestMapping("/api/legacy/challenges")
 @RequiredArgsConstructor
 public class ChallengeController {
 

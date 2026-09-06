@@ -21,7 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "universities")
+@Table(name = "legacy_universities")
 @Getter
 @Setter
 @Builder

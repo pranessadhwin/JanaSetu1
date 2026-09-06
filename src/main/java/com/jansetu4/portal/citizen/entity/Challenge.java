@@ -25,7 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "challenges")
+@Table(name = "legacy_challenges")
 @Getter
 @Setter
 @Builder

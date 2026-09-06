@@ -23,4 +23,13 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations(uploadLocation.endsWith("/") ? uploadLocation : uploadLocation + "/");
     }
+
+    @Override
+    public void addCorsMappings(org.springframework.web.servlet.config.annotation.CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .allowedHeaders("*")
+                .allowCredentials(true);
+    }
 }

@@ -50,18 +50,16 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .cors(org.springframework.security.config.Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/", "/*.html", "/assets/**", "/css/**", "/js/**", "/favicon.ico",
                                 "/challenges/**", "/projects/**", "/universities/**", "/industry/**",
-                                "/dashboard/**", "/knowledge/**", "/mentor/**", "/login", "/register/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/citizen/register", "/api/auth/login",
-                                "/api/industry/register", "/api/challenges", "/api/mentor/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/analytics/**", "/api/dashboard/**", "/uploads/**", "/api/media/**",
-                                "/api/universities/**", "/api/local-bodies/**", "/api/challenges/**", "/api/projects/**",
-                                "/api/industry/**", "/api/knowledge/**").permitAll()
-                        .anyRequest().authenticated())
+                                "/dashboard/**", "/knowledge/**", "/mentor/**", "/login", "/register/**", "/uploads/**").permitAll()
+                        .anyRequest().permitAll())
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
