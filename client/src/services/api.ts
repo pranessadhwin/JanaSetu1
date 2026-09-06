@@ -43,6 +43,12 @@ export const assignChallenge = (id: number | string, data: { universityId: numbe
   });
 };
 
+export const upvoteChallenge = (id: number | string) => {
+  return fetchApi<any>(`/challenges/${id}/upvote`, {
+    method: "POST",
+  });
+};
+
 // Projects
 export const getProjects = (params?: Record<string, string>) => {
   const qs = params ? `?${new URLSearchParams(params).toString()}` : "";
